@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -41,8 +42,9 @@ class ItemRecord(Base):
     category_type: Mapped[str | None] = mapped_column(String(128), nullable=True)  # internal extra
 
     # --- Pipeline metadata (per-field) ---
-    confidence: Mapped[dict] = mapped_column(JSON, default=dict)  # {field: 0..1}
-    source: Mapped[dict] = mapped_column(JSON, default=dict)      # {field: "vlm"|"barcode_decoder"|...}
+    # MutableDict so in-place edits (e.g. on PATCH/merge) are tracked & persisted.
+    confidence: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=dict)  # {field: 0..1}
+    source: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=dict)      # {field: "vlm"|...}
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

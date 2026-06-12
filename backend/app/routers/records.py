@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import ItemRecord, User
@@ -29,22 +30,35 @@ def _get_owned(db: Session, user_id: int, record_id: int) -> ItemRecord:
 
 @router.get("", response_model=list[RecordOut])
 def list_records(
+    response: Response,
     brand: str | None = Query(None),
     category_type: str | None = Query(None),
     needs_review: bool | None = Query(None),
     session_id: int | None = Query(None),
+    limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[ItemRecord]:
-    stmt = select(ItemRecord).where(ItemRecord.user_id == current_user.id)
+    filters = [ItemRecord.user_id == current_user.id]
     if brand:
-        stmt = stmt.where(ItemRecord.brand == brand)
+        filters.append(ItemRecord.brand == brand)
     if category_type:
-        stmt = stmt.where(ItemRecord.category_type == category_type)
+        filters.append(ItemRecord.category_type == category_type)
     if needs_review is not None:
-        stmt = stmt.where(ItemRecord.needs_review == needs_review)
+        filters.append(ItemRecord.needs_review == needs_review)
     if session_id is not None:
-        stmt = stmt.where(ItemRecord.session_id == session_id)
+        filters.append(ItemRecord.session_id == session_id)
+
+    total = db.scalar(select(func.count()).select_from(ItemRecord).where(*filters)) or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    stmt = (
+        select(ItemRecord).where(*filters)
+        .order_by(ItemRecord.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     return list(db.scalars(stmt))
 
 

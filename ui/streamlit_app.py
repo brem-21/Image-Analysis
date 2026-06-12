@@ -114,10 +114,32 @@ with tab_extract:
             with st.spinner("Running hybrid pipeline (barcode + Gemini Flash + enrichment)…"):
                 resp = client().extract(files, label=label)
             ss.last_session_id = resp["session_id"]
-            st.success(f"Extracted {len(resp['records'])} record(s) — session #{resp['session_id']}")
-            for rec in resp["records"]:
-                flag = "⚠️ needs review" if rec.get("needs_review") else "✅"
-                with st.expander(f"{flag}  Record #{rec['id']} — {rec.get('item_name') or 'Unnamed'}"):
+            records = resp["records"]
+            st.success(f"Extracted {len(records)} record(s) — session #{resp['session_id']}")
+
+            failed = [r for r in records if r.get("vlm_error")]
+            if failed:
+                st.error(
+                    f"⚠️ Gemini extraction failed for {len(failed)} of {len(records)} image(s) — "
+                    "only barcode/decoded fields were filled. See per-record details below."
+                )
+
+            for rec in records:
+                err = rec.get("vlm_error")
+                if err:
+                    flag = "🛑 extraction failed"
+                elif rec.get("needs_review"):
+                    flag = "⚠️ needs review"
+                else:
+                    flag = "✅"
+                expanded = bool(err)
+                with st.expander(f"{flag}  Record #{rec['id']} — {rec.get('item_name') or 'Unnamed'}", expanded=expanded):
+                    if err:
+                        st.error(f"**Gemini (VLM) error:** {err}")
+                        st.caption(
+                            "Non-VLM fields (e.g. barcode) may still be present. "
+                            "If this is a 503/overload, retry; or switch GEMINI_MODEL to a stable model."
+                        )
                     c1, c2 = st.columns(2)
                     with c1:
                         st.markdown("**Values**")
