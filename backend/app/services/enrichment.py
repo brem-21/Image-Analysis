@@ -27,8 +27,6 @@ def lookup_barcode(barcode: str, timeout: float = 6.0) -> dict | None:
     result: dict = {}
     if p.get("brands"):
         result["brand"] = p["brands"].split(",")[0].strip()
-    if p.get("product_name"):
-        result["product_name"] = p["product_name"].strip()
     if p.get("categories"):
         result["category_type"] = p["categories"].split(",")[-1].strip()
     if p.get("countries"):

@@ -61,6 +61,16 @@ def update_record(
         setattr(rec, field, value.value if hasattr(value, "value") else value)
         rec.confidence[field] = 1.0  # human edit
         rec.source[field] = "human"
+
+    # Regenerate ITEM_NAME from contributing fields unless the user set it directly.
+    if "item_name" not in updates:
+        from app.services.normalize import build_item_name
+
+        regenerated = build_item_name({f: getattr(rec, f) for f in ItemRecord.IMDB_FIELDS})
+        if regenerated:
+            rec.item_name = regenerated
+            rec.source["item_name"] = "generated"
+
     # Re-evaluate review flag now that a human has touched fields.
     rec.needs_review = any(c < 0.7 for c in rec.confidence.values())
     db.commit()
