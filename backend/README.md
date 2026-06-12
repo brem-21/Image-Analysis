@@ -62,6 +62,19 @@ All routes except `/api/v1/auth/*` and `/health` require `Authorization: Bearer 
 - **JWT secret:** startup refuses to boot in `ENVIRONMENT=production` if `JWT_SECRET` is unset/default.
 - **Pagination:** `DEFAULT_PAGE_SIZE` / `MAX_PAGE_SIZE`.
 
+## Tests
+
+```powershell
+pip install -r requirements-dev.txt
+pytest                 # 51 tests; no network / no Gemini key needed (VLM is mocked)
+pytest --cov=app       # with coverage
+```
+
+The suite covers auth (incl. rate-limit & token-type), upload validation,
+records/pagination/ownership, dedup/merge, the exact export header, the
+ITEM_NAME template, barcode checksums, and a regression test ensuring the
+Gemini schema has no open dicts (the bug that once broke all extraction).
+
 ## Database migrations (Alembic)
 
 Schema is versioned with Alembic — no more dropping the DB on changes.
