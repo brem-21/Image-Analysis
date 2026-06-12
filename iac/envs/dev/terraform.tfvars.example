@@ -1,0 +1,10 @@
+aws_region   = "us-east-1"
+project_name = "image-analysis"
+environment  = "dev"
+vpc_cidr     = "10.0.0.0/16"
+az_count     = 2
+
+# Restrict to your IP: e.g. "203.0.113.10/32"
+allowed_ssh_cidr = "YOUR_IP/32"
+
+# key_name = "your-key-pair-name"
