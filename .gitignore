@@ -147,6 +147,11 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Environments
 .env
 .envrc
@@ -217,6 +222,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+ROADMAP.md
 # Terraform
 **/.terraform/
 **/.terraform.lock.hcl
