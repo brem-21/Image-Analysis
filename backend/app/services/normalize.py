@@ -1,5 +1,6 @@
-"""Deterministic validation & normalization. Makes output search-ready and
-collapses naming variants (centralized naming criterion)."""
+"""Deterministic validation & normalization. Makes output search-ready,
+collapses naming variants (centralized naming), and generates a consistent
+ITEM_NAME from a fixed template."""
 from __future__ import annotations
 
 import re
@@ -36,6 +37,14 @@ def parse_weight(raw: str | None) -> tuple[float | None, str | None]:
     return value, unit
 
 
+def format_weight(value: float | None, unit: str | None) -> str | None:
+    """Render the single WEIGHT column, e.g. 250.0/'g' -> '250G'."""
+    if value is None:
+        return None
+    num = int(value) if float(value).is_integer() else value
+    return f"{num}{(unit or '').upper()}"
+
+
 # --- Country of origin ----------------------------------------------------
 _COUNTRY_ALIASES = {
     "prc": "China", "p.r.c": "China", "made in china": "China",
@@ -43,6 +52,7 @@ _COUNTRY_ALIASES = {
     "uk": "United Kingdom", "u.k": "United Kingdom", "great britain": "United Kingdom",
     "uae": "United Arab Emirates",
     "rsa": "South Africa",
+    "gh": "Ghana", "made in ghana": "Ghana",
     "deutschland": "Germany",
 }
 
@@ -57,14 +67,14 @@ def normalize_country(raw: str | None) -> str | None:
     return cleaned.strip().title()
 
 
-# --- Canonical naming (brand / category / segment / packaging) -----------
+# --- Canonical naming -----------------------------------------------------
 # Seed dictionaries; extend with the provided sample data. Fuzzy match collapses
-# variants like "coca cola" / "Coca-Cola" / "COKE" -> one canonical label.
+# variants ("coca cola" / "Coca-Cola" / "COKE") -> one canonical label.
 CANONICAL = {
-    "brand": ["Coca-Cola", "Pepsi", "Nestle", "Unilever", "Cadbury", "Indomie"],
-    "category_type": ["Beverages", "Snacks", "Dairy", "Household", "Personal Care", "Confectionery"],
-    "segment_type": ["Carbonated Drinks", "Instant Noodles", "Chocolate", "Detergent", "Bottled Water"],
-    "packaging_type": ["Bottle", "Can", "Sachet", "Box", "Pouch", "Carton", "Jar", "Tube"],
+    "brand": ["Coca-Cola", "Pepsi", "Nestle", "Unilever", "Blue Band", "Lele", "Indomie"],
+    "category_type": ["Beverages", "Snacks", "Dairy", "Spreads", "Condiments", "Household", "Personal Care"],
+    "variant_type": ["Original", "Diet", "Salted", "Unsalted", "Zero", "Light"],
+    "packaging_type": ["Bottle", "Can", "Sachet", "Box", "Pouch", "Carton", "Jar", "Tub", "Glass Jar", "Tube"],
 }
 
 _FUZZY_THRESHOLD = 82
@@ -80,3 +90,33 @@ def canonicalize(field: str, value: str | None) -> str | None:
     if match and match[1] >= _FUZZY_THRESHOLD:
         return match[0]
     return value.strip().title()
+
+
+# --- ITEM_NAME generation -------------------------------------------------
+# Fixed token order for the standardized item name. Tweak here to change the
+# naming convention across every row. Empty/duplicate tokens are dropped.
+ITEM_NAME_ORDER = (
+    "brand", "weight", "packaging_type", "fragrance_flavor",
+    "variant_type", "tagline", "category_type", "manufacturer",
+)
+
+
+def build_item_name(values: dict) -> str | None:
+    """Compose a consistent uppercase ITEM_NAME from the record's fields."""
+    weight_str = format_weight(values.get("weight_value"), values.get("weight_unit"))
+    parts_source = {**values, "weight": weight_str}
+
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for key in ITEM_NAME_ORDER:
+        val = parts_source.get(key)
+        if not val:
+            continue
+        token = str(val).upper().strip()
+        # Avoid repeating words already present (e.g. brand echoed in tagline).
+        for word in token.split():
+            if word not in seen:
+                tokens.append(word)
+                seen.add(word)
+    name = " ".join(tokens).strip()
+    return name or None

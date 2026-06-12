@@ -11,7 +11,12 @@ def _utcnow() -> datetime:
 
 
 class ItemRecord(Base):
-    """One product-master row: the 10 IMDB attributes plus pipeline metadata."""
+    """One product-master row.
+
+    Official export columns map from these fields (see services/export.py).
+    Weight is stored split (value+unit); WEIGHT is rendered on export.
+    `category_type`, confidence, source and needs_review are internal extras.
+    """
 
     __tablename__ = "records"
 
@@ -19,18 +24,21 @@ class ItemRecord(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     session_id: Mapped[int | None] = mapped_column(ForeignKey("sessions.id"), index=True, nullable=True)
 
-    # --- The 10 IMDB attributes ---
+    # --- Product attributes ---
+    item_name: Mapped[str | None] = mapped_column(String(512), nullable=True)  # generated
     barcode: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
-    category_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    segment_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     manufacturer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     brand: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
-    product_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     weight_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     weight_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
     packaging_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     country_of_origin: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    promo_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    variant_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fragrance_flavor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    promotion: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    addons: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    tagline: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    category_type: Mapped[str | None] = mapped_column(String(128), nullable=True)  # internal extra
 
     # --- Pipeline metadata (per-field) ---
     confidence: Mapped[dict] = mapped_column(JSON, default=dict)  # {field: 0..1}
@@ -43,8 +51,15 @@ class ItemRecord(Base):
     user = relationship("User", back_populates="records")
     session = relationship("ExtractionSession", back_populates="records")
 
+    @property
+    def weight(self) -> str | None:
+        """Single rendered WEIGHT string, e.g. '250G'."""
+        from app.services.normalize import format_weight
+
+        return format_weight(self.weight_value, self.weight_unit)
+
     IMDB_FIELDS = (
-        "barcode", "category_type", "segment_type", "manufacturer", "brand",
-        "product_name", "weight_value", "weight_unit", "packaging_type",
-        "country_of_origin", "promo_message",
+        "item_name", "barcode", "manufacturer", "brand", "weight_value", "weight_unit",
+        "packaging_type", "country_of_origin", "variant_type", "fragrance_flavor",
+        "promotion", "addons", "tagline", "category_type",
     )

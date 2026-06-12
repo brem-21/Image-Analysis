@@ -5,12 +5,17 @@ product image using a **hybrid pipeline**: dedicated barcode decoder +
 **Gemini Flash** (structured JSON output) + Open Food Facts enrichment +
 deterministic normalization. Records are scoped per authenticated user.
 
-## The 10 IMDB attributes
-`barcode, category_type, segment_type, manufacturer, brand, product_name,
-weight_value + weight_unit, packaging_type, country_of_origin, promo_message`
+## Output columns (export format)
+`ITEM_NAME, BARCODE, MANUFACTURER, BRAND, WEIGHT, PACKAGING_TYPE, COUNTRY,
+VARIANT_TYPE, FRAGRANCE_FLAVOR, PROMOTION, ADDONS, TAGLINE`
+
+- **ITEM_NAME** is *generated* from a fixed template (see
+  `services/normalize.py::build_item_name`) — this is the centralized-naming logic.
+- **WEIGHT** is rendered (`250G`) from the internally-split `weight_value` + `weight_unit`.
+- `?include_meta=true` appends internal extras `CATEGORY_TYPE, NEEDS_REVIEW`.
 
 Each field carries `confidence`, `source` (`barcode_decoder` / `vlm` /
-`external_lookup` / `human`), and a `needs_review` flag.
+`external_lookup` / `generated` / `human`), and a `needs_review` flag.
 
 ## Setup
 
