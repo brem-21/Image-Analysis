@@ -99,6 +99,7 @@ class RecordOut(IMDBAttributes):
     confidence: dict[str, float] = Field(default_factory=dict)
     source: dict[str, str] = Field(default_factory=dict)
     needs_review: bool = False
+    vlm_error: str | None = None  # transient: set when Gemini extraction failed
     created_at: datetime
     updated_at: datetime
 

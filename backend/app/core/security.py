@@ -11,13 +11,21 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 TokenType = Literal["access", "refresh"]
 
+# bcrypt only considers the first 72 bytes of input and errors on longer values
+# in newer backends. Truncate explicitly so behavior is predictable.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _prepare(password: str) -> str:
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES].decode("utf-8", errors="ignore")
+
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(_prepare(password))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(_prepare(plain), hashed)
 
 
 def _create_token(subject: str, token_type: TokenType, expires: timedelta) -> str:

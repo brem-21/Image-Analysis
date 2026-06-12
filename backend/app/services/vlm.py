@@ -49,10 +49,15 @@ class GeminiExtractor:
     def _get_client(self):
         if self._client is None:
             from google import genai
+            from google.genai import types
 
             if not settings.gemini_api_key:
                 raise RuntimeError("GEMINI_API_KEY is not configured")
-            self._client = genai.Client(api_key=settings.gemini_api_key)
+            try:
+                http_options = types.HttpOptions(timeout=int(settings.gemini_timeout_seconds * 1000))
+                self._client = genai.Client(api_key=settings.gemini_api_key, http_options=http_options)
+            except Exception:  # older SDKs may not support http_options timeout
+                self._client = genai.Client(api_key=settings.gemini_api_key)
         return self._client
 
     def extract(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> VLMExtraction:

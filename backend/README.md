@@ -36,21 +36,31 @@ Interactive API docs: http://localhost:8000/docs
 
 ## API
 
+All feature routes are under the **`/api/v1`** prefix (configurable via `API_PREFIX`).
+`/health` stays at the root for probes.
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/auth/register` | Create a user |
-| POST | `/auth/login` | Get access + refresh tokens |
-| POST | `/auth/refresh` | Rotate tokens |
-| GET | `/auth/me` | Current user |
-| POST | `/extract` | Upload image(s) → IMDB records |
-| GET | `/records` | List records (filter brand/category/needs_review/session) |
-| PATCH | `/records/{id}` | Save human edits |
-| DELETE | `/records/{id}` | Delete a record |
-| POST | `/records/dedup` | Merge suggestions (per user) |
-| POST | `/records/merge` | Apply a merge |
-| GET | `/export?format=csv\|xlsx` | Download product-master file |
+| POST | `/api/v1/auth/register` | Create a user |
+| POST | `/api/v1/auth/login` | Get access + refresh tokens (rate-limited) |
+| POST | `/api/v1/auth/refresh` | Rotate tokens |
+| GET | `/api/v1/auth/me` | Current user |
+| POST | `/api/v1/extract` | Upload image(s) → IMDB records (validated: type/size/count) |
+| GET | `/api/v1/records` | List records — filters + `limit`/`offset` (returns `X-Total-Count`) |
+| PATCH | `/api/v1/records/{id}` | Save human edits |
+| DELETE | `/api/v1/records/{id}` | Delete a record |
+| POST | `/api/v1/records/dedup` | Merge suggestions (per user) |
+| POST | `/api/v1/records/merge` | Apply a merge |
+| GET | `/api/v1/export?format=csv\|xlsx` | Download product-master file |
+| GET | `/health` | Readiness probe (checks DB) |
 
-All routes except `/auth/*` and `/health` require `Authorization: Bearer <token>`.
+All routes except `/api/v1/auth/*` and `/health` require `Authorization: Bearer <token>`.
+
+### Operational guards
+- **Upload limits / cost guard:** `MAX_UPLOAD_FILES`, `MAX_UPLOAD_MB`, `ALLOWED_IMAGE_TYPES` (each image is a paid VLM call).
+- **Login rate-limit:** `LOGIN_MAX_ATTEMPTS` per `LOGIN_WINDOW_SECONDS` per IP.
+- **JWT secret:** startup refuses to boot in `ENVIRONMENT=production` if `JWT_SECRET` is unset/default.
+- **Pagination:** `DEFAULT_PAGE_SIZE` / `MAX_PAGE_SIZE`.
 
 ## Architecture
 

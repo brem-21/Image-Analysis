@@ -11,9 +11,13 @@ class APIError(Exception):
         super().__init__(f"{status}: {detail}")
 
 
+API_PREFIX = "/api/v1"
+
+
 class IMDBClient:
     def __init__(self, base_url: str, token: str | None = None, timeout: float = 120.0):
-        self.base_url = base_url.rstrip("/")
+        self.root_url = base_url.rstrip("/")
+        self.base_url = self.root_url + API_PREFIX
         self.token = token
         self.timeout = timeout
 
@@ -91,4 +95,4 @@ class IMDBClient:
                                         headers=self._headers(), params=params, timeout=self.timeout))
 
     def health(self) -> dict:
-        return self._handle(requests.get(f"{self.base_url}/health", timeout=self.timeout))
+        return self._handle(requests.get(f"{self.root_url}/health", timeout=self.timeout))
