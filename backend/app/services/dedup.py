@@ -2,7 +2,7 @@
 
 Strategy:
   1. Exact barcode match  -> strong duplicate (score 1.0)
-  2. Otherwise fuzzy on brand + product_name, gated by weight agreement.
+  2. Otherwise fuzzy on brand + item_name, gated by weight agreement.
 All comparisons are scoped to a single user's record set.
 """
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _weight_matches(a: ItemRecord, b: ItemRecord) -> bool:
 
 def _fuzzy_score(a: ItemRecord, b: ItemRecord) -> float:
     brand = fuzz.WRatio(a.brand or "", b.brand or "") / 100.0
-    name = fuzz.WRatio(a.product_name or "", b.product_name or "") / 100.0
+    name = fuzz.WRatio(a.item_name or "", b.item_name or "") / 100.0
     return round(0.5 * brand + 0.5 * name, 3)
 
 
@@ -48,7 +48,7 @@ def find_duplicates(records: list[ItemRecord]) -> list[MergeCandidate]:
             continue
         score = _fuzzy_score(keep, dup)
         if score >= _FUZZY_THRESHOLD:
-            matched = ["brand", "product_name"]
+            matched = ["brand", "item_name"]
             if keep.weight_value is not None and dup.weight_value is not None:
                 matched.append("weight")
             candidates.append(MergeCandidate(
