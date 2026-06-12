@@ -62,6 +62,27 @@ All routes except `/api/v1/auth/*` and `/health` require `Authorization: Bearer 
 - **JWT secret:** startup refuses to boot in `ENVIRONMENT=production` if `JWT_SECRET` is unset/default.
 - **Pagination:** `DEFAULT_PAGE_SIZE` / `MAX_PAGE_SIZE`.
 
+## Database migrations (Alembic)
+
+Schema is versioned with Alembic — no more dropping the DB on changes.
+
+```powershell
+# apply all migrations (run before first start in production)
+alembic upgrade head
+
+# after changing a model, generate a migration, then review it
+alembic revision --autogenerate -m "describe change"
+alembic upgrade head
+
+alembic current      # show applied revision
+alembic downgrade -1 # roll back one
+```
+
+- Alembic reads `DATABASE_URL` from your `.env` (via `app.config`), so set it first.
+- **Dev convenience:** `AUTO_CREATE_TABLES=true` makes the app `create_all` on
+  startup (handy for local/tests). **In production set it `false`** and let
+  `alembic upgrade head` own the schema.
+
 ## Architecture
 
 ```

@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     environment: str = "development"  # "production" enforces stricter checks
     log_level: str = "INFO"
     api_prefix: str = "/api/v1"
+    # Dev convenience: create tables on startup. In production set this False and
+    # manage schema with Alembic (`alembic upgrade head`).
+    auto_create_tables: bool = True
 
     # Upload limits / cost guards (each image is a paid VLM call)
     max_upload_files: int = 20

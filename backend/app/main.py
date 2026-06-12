@@ -29,7 +29,10 @@ async def lifespan(app: FastAPI):
     if not settings.gemini_api_key:
         logger.warning("GEMINI_API_KEY is not set — image extraction will fail until configured.")
 
-    init_db()
+    if settings.auto_create_tables:
+        init_db()
+    else:
+        logger.info("AUTO_CREATE_TABLES is off — manage schema with `alembic upgrade head`.")
     yield
 
 
