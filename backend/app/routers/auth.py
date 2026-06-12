@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
+from app.core.ratelimit import login_rate_limit
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -30,7 +31,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
     return user
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post("/login", response_model=TokenPair, dependencies=[Depends(login_rate_limit)])
 def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenPair:
     user = db.scalar(select(User).where(User.email == payload.email))
     if not user or not verify_password(payload.password, user.hashed_password):
