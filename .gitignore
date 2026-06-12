@@ -223,3 +223,19 @@ __marimo__/
 .streamlit/secrets.toml
 
 ROADMAP.md
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+!*.tfvars.example
+.terraformrc
+terraform.rc
