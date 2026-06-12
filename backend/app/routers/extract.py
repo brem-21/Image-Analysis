@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import ExtractionSession, ItemRecord, User
@@ -8,6 +9,32 @@ from app.schemas.imdb import ExtractResponse, RecordOut
 from app.services.pipeline import run_pipeline
 
 router = APIRouter(prefix="/extract", tags=["extract"])
+
+_MAX_BYTES = settings.max_upload_mb * 1024 * 1024
+
+
+def _validate_uploads(files: list[UploadFile]) -> None:
+    """Guard against abuse / runaway cost — each image is a paid VLM call."""
+    if not files:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No files uploaded.")
+    if len(files) > settings.max_upload_files:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Too many files: {len(files)} (max {settings.max_upload_files} per request).",
+        )
+    allowed = settings.allowed_image_type_set
+    for f in files:
+        if (f.content_type or "").lower() not in allowed:
+            raise HTTPException(
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                f"Unsupported type for '{f.filename}': {f.content_type}. Allowed: {sorted(allowed)}.",
+            )
+        # starlette populates .size when the client sends Content-Length.
+        if f.size is not None and f.size > _MAX_BYTES:
+            raise HTTPException(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                f"'{f.filename}' is {f.size // (1024 * 1024)}MB (max {settings.max_upload_mb}MB).",
+            )
 
 
 def _record_from_pipeline(result: dict, user_id: int, session_id: int) -> ItemRecord:
@@ -44,23 +71,33 @@ async def extract(
 ) -> ExtractResponse:
     """Accept one or more product images, run the hybrid pipeline, and persist
     one IMDB record per image (scoped to the current user + this batch)."""
+    _validate_uploads(files)
+
     batch = ExtractionSession(user_id=current_user.id, label=label)
     db.add(batch)
     db.flush()  # assign batch.id
 
-    records: list[ItemRecord] = []
+    # Keep each persisted record paired with its (transient) VLM error.
+    pairs: list[tuple[ItemRecord, str | None]] = []
     for f in files:
         image_bytes = await f.read()
+        if len(image_bytes) > _MAX_BYTES:  # fallback when Content-Length was absent
+            raise HTTPException(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                f"'{f.filename}' exceeds the {settings.max_upload_mb}MB limit.",
+            )
         result = run_pipeline(image_bytes)
         rec = _record_from_pipeline(result, current_user.id, batch.id)
         db.add(rec)
-        records.append(rec)
+        pairs.append((rec, result.get("vlm_error")))
 
     db.commit()
-    for rec in records:
-        db.refresh(rec)
 
-    return ExtractResponse(
-        session_id=batch.id,
-        records=[RecordOut.model_validate(r) for r in records],
-    )
+    out: list[RecordOut] = []
+    for rec, vlm_error in pairs:
+        db.refresh(rec)
+        record_out = RecordOut.model_validate(rec)
+        record_out.vlm_error = vlm_error
+        out.append(record_out)
+
+    return ExtractResponse(session_id=batch.id, records=out)
