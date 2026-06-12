@@ -100,6 +100,7 @@ class RecordOut(IMDBAttributes):
     source: dict[str, str] = Field(default_factory=dict)
     needs_review: bool = False
     vlm_error: str | None = None  # transient: set when Gemini extraction failed
+    image_filename: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -128,6 +129,16 @@ class ExtractResponse(BaseModel):
     records: list[RecordOut]
 
 
+class SessionOut(BaseModel):
+    """A past scan batch with summary counts (for the history view)."""
+
+    id: int
+    label: str
+    created_at: datetime
+    item_count: int
+    needs_review_count: int
+
+
 class MergeCandidate(BaseModel):
     record_id: int
     duplicate_of: int
@@ -143,3 +154,11 @@ class DedupResponse(BaseModel):
 class MergeRequest(BaseModel):
     keep_id: int
     merge_id: int
+
+
+class BulkIds(BaseModel):
+    ids: list[int]
+
+
+class BulkResult(BaseModel):
+    affected: int

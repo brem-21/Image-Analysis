@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import SessionLocal, init_db
-from app.routers import auth, export, extract, records
+from app.routers import auth, export, extract, meta, records, sessions
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -66,6 +66,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(extract.router, prefix=settings.api_prefix)
 app.include_router(records.router, prefix=settings.api_prefix)
+app.include_router(sessions.router, prefix=settings.api_prefix)
+app.include_router(meta.router, prefix=settings.api_prefix)
 app.include_router(export.router, prefix=settings.api_prefix)
 
 

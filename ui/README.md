@@ -27,8 +27,9 @@ suggestions, and download the CSV/Excel product-master file.
 
 | Tab | What it tests |
 |-----|---------------|
-| **📤 Extract** | Upload image(s) → `POST /extract`; shows values + per-field confidence + source, and the ⚠️ needs-review flag |
-| **📋 Records & Edit** | `GET /records` with filters; edit any of the 10 fields → `PATCH` (marks fields source=human); delete |
+| **📤 Extract** | Upload image(s) → `POST /extract`; shows values + per-field confidence + source, and the ⚠️ needs-review / 🛑 extraction-failed flags |
+| **📋 Records & Edit** | `GET /records` with filters; **scanned image shown beside the fields**, per-field confidence colour-flags (🟢🟡🔴), **canonical dropdowns** for packaging/category/variant, **🔄 re-scan** (`POST /records/{id}/rescan`, keeps human edits), edit → `PATCH` (only changed fields become source=human), and **bulk approve/delete** (`/records/bulk-approve`, `/records/bulk-delete`) |
+| **🕘 History** | `GET /sessions` — past scan batches with counts; drill into a batch's items |
 | **🔁 Dedup & Merge** | `POST /records/dedup` (per-user) and `POST /records/merge` |
 | **⬇️ Export** | `GET /export?format=csv\|xlsx` with a download button + preview |
 

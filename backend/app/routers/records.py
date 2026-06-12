@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -7,12 +8,15 @@ from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import ItemRecord, User
 from app.schemas.imdb import (
+    BulkIds,
+    BulkResult,
     DedupResponse,
     MergeRequest,
     RecordOut,
     RecordUpdate,
 )
-from app.services import dedup
+from app.services import dedup, storage
+from app.services.pipeline import run_pipeline
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -99,8 +103,89 @@ def delete_record(
     db: Session = Depends(get_db),
 ) -> None:
     rec = _get_owned(db, current_user.id, record_id)
+    storage.delete_image(rec.image_filename)
     db.delete(rec)
     db.commit()
+
+
+@router.get("/{record_id}/image")
+def get_record_image(
+    record_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Return the stored source image for a record (for review)."""
+    rec = _get_owned(db, current_user.id, record_id)
+    if not storage.image_exists(rec.image_filename):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No stored image for this record")
+    import io
+
+    data = storage.read_image(rec.image_filename)
+    return StreamingResponse(io.BytesIO(data), media_type=storage.media_type(rec.image_filename))
+
+
+@router.post("/{record_id}/rescan", response_model=RecordOut)
+def rescan_record(
+    record_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RecordOut:
+    """Re-run the pipeline on the stored image. Human-edited fields are kept."""
+    rec = _get_owned(db, current_user.id, record_id)
+    if not storage.image_exists(rec.image_filename):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No stored image to re-scan")
+
+    result = run_pipeline(storage.read_image(rec.image_filename))
+    values = result["values"]
+    for field in ItemRecord.IMDB_FIELDS:
+        if rec.source.get(field) == "human":
+            continue  # preserve human corrections
+        setattr(rec, field, values.get(field))
+        if field in result["confidence"]:
+            rec.confidence[field] = result["confidence"][field]
+        if field in result["source"]:
+            rec.source[field] = result["source"][field]
+    rec.needs_review = any(c < settings.confidence_threshold for c in rec.confidence.values())
+
+    db.commit()
+    db.refresh(rec)
+    out = RecordOut.model_validate(rec)
+    out.vlm_error = result.get("vlm_error")
+    return out
+
+
+@router.post("/bulk-approve", response_model=BulkResult)
+def bulk_approve(
+    payload: BulkIds,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BulkResult:
+    """Clear the needs-review flag on the given owned records."""
+    stmt = select(ItemRecord).where(
+        ItemRecord.user_id == current_user.id, ItemRecord.id.in_(payload.ids)
+    )
+    records = list(db.scalars(stmt))
+    for rec in records:
+        rec.needs_review = False
+    db.commit()
+    return BulkResult(affected=len(records))
+
+
+@router.post("/bulk-delete", response_model=BulkResult)
+def bulk_delete(
+    payload: BulkIds,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BulkResult:
+    stmt = select(ItemRecord).where(
+        ItemRecord.user_id == current_user.id, ItemRecord.id.in_(payload.ids)
+    )
+    records = list(db.scalars(stmt))
+    for rec in records:
+        storage.delete_image(rec.image_filename)
+        db.delete(rec)
+    db.commit()
+    return BulkResult(affected=len(records))
 
 
 @router.post("/dedup", response_model=DedupResponse)

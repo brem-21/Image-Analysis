@@ -47,6 +47,7 @@ All feature routes are under the **`/api/v1`** prefix (configurable via `API_PRE
 | GET | `/api/v1/auth/me` | Current user |
 | POST | `/api/v1/extract` | Upload image(s) → IMDB records (validated: type/size/count) |
 | GET | `/api/v1/records` | List records — filters + `limit`/`offset` (returns `X-Total-Count`) |
+| GET | `/api/v1/sessions` | List scan batches (history) with item + needs-review counts |
 | PATCH | `/api/v1/records/{id}` | Save human edits |
 | DELETE | `/api/v1/records/{id}` | Delete a record |
 | POST | `/api/v1/records/dedup` | Merge suggestions (per user) |

@@ -26,10 +26,33 @@ ss.setdefault("token", None)
 ss.setdefault("email", None)
 ss.setdefault("base_url", "http://localhost:8000")
 ss.setdefault("last_session_id", None)
+ss.setdefault("canonical", None)
+
+# Fields edited via canonical dropdowns (keeps naming centralized).
+CANONICAL_FIELDS = ["packaging_type", "category_type", "variant_type"]
 
 
 def client() -> IMDBClient:
     return IMDBClient(ss.base_url, token=ss.token)
+
+
+def get_canonical() -> dict:
+    if ss.canonical is None:
+        try:
+            ss.canonical = client().canonical()
+        except APIError:
+            ss.canonical = {}
+    return ss.canonical
+
+
+def conf_emoji(conf) -> str:
+    if conf is None:
+        return "⬜"
+    if conf >= 0.7:
+        return "🟢"
+    if conf >= 0.4:
+        return "🟡"
+    return "🔴"
 
 
 def confidence_badge(records: list[dict]) -> pd.DataFrame:
@@ -42,6 +65,14 @@ def confidence_badge(records: list[dict]) -> pd.DataFrame:
         row["needs_review"] = r.get("needs_review")
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def show_record_image(record_id: int, width: int = 280) -> None:
+    try:
+        img = client().get_record_image(record_id)
+        st.image(img, width=width, caption=f"scanned image · record #{record_id}")
+    except APIError:
+        st.caption("🖼️ No stored image for this record.")
 
 
 # --- sidebar: connection + auth -------------------------------------------
@@ -92,8 +123,8 @@ if not ss.token:
     st.info("👈 Register and log in from the sidebar to begin.")
     st.stop()
 
-tab_extract, tab_records, tab_dedup, tab_export = st.tabs(
-    ["📤 Extract", "📋 Records & Edit", "🔁 Dedup & Merge", "⬇️ Export"]
+tab_extract, tab_records, tab_history, tab_dedup, tab_export = st.tabs(
+    ["📤 Extract", "📋 Records & Edit", "🕘 History", "🔁 Dedup & Merge", "⬇️ Export"]
 )
 
 # --- Extract tab -----------------------------------------------------------
@@ -162,7 +193,7 @@ with tab_records:
 
     review_param = None if f_review == "All" else (f_review == "true")
     try:
-        records = client().list_records(brand=f_brand, category_type=f_cat, needs_review=review_param)
+        records = client().list_records(brand=f_brand, category_type=f_cat, needs_review=review_param, limit=200)
     except APIError as e:
         records = []
         st.error(e.detail)
@@ -170,51 +201,137 @@ with tab_records:
     if not records:
         st.info("No records yet. Extract some on the Extract tab.")
     else:
+        n_review = sum(1 for r in records if r.get("needs_review"))
+        m1, m2 = st.columns(2)
+        m1.metric("Records shown", len(records))
+        m2.metric("⚠️ Needs review", n_review)
         st.dataframe(confidence_badge(records), use_container_width=True, hide_index=True)
 
-        st.markdown("### ✏️ Edit a record")
-        ids = [r["id"] for r in records]
-        sel = st.selectbox("Record id", ids)
-        rec = next(r for r in records if r["id"] == sel)
-
-        with st.form(f"edit_{sel}"):
-            cols = st.columns(2)
-            edited = {}
-            for i, f in enumerate(IMDB_FIELDS):
-                target = cols[i % 2]
-                if f == "weight_unit":
-                    cur = rec.get(f) or ""
-                    edited[f] = target.selectbox(f, WEIGHT_UNITS, index=WEIGHT_UNITS.index(cur) if cur in WEIGHT_UNITS else 0)
-                elif f == "weight_value":
-                    edited[f] = target.number_input(f, value=float(rec.get(f) or 0.0), step=1.0)
-                else:
-                    edited[f] = target.text_input(f, rec.get(f) or "")
-
-            colsave, coldel = st.columns(2)
-            save = colsave.form_submit_button("💾 Save edits", type="primary", use_container_width=True)
-            delete = coldel.form_submit_button("🗑️ Delete record", use_container_width=True)
-
-        if save:
-            payload = {}
-            for f, v in edited.items():
-                if f == "weight_value":
-                    payload[f] = v or None
-                elif f == "weight_unit":
-                    payload[f] = v or None
-                else:
-                    payload[f] = v or None
+        # --- Bulk actions (review queue) ---
+        st.markdown("#### ✅ Bulk actions")
+        labels = {r["id"]: f"#{r['id']} · {r.get('item_name') or r.get('brand') or 'Unnamed'}" for r in records}
+        picked = st.multiselect("Select records", list(labels), format_func=lambda i: labels[i])
+        bcol1, bcol2 = st.columns(2)
+        if bcol1.button("Approve selected", disabled=not picked, use_container_width=True):
             try:
-                client().update_record(sel, payload)
-                st.success("Saved. Fields you changed are now source=human, confidence=1.0.")
+                res = client().bulk_approve(picked)
+                st.success(f"Approved {res['affected']} record(s).")
+                st.rerun()
+            except APIError as e:
+                st.error(e.detail)
+        if bcol2.button("🗑️ Delete selected", disabled=not picked, use_container_width=True):
+            try:
+                res = client().bulk_delete(picked)
+                st.success(f"Deleted {res['affected']} record(s).")
                 st.rerun()
             except APIError as e:
                 st.error(e.detail)
 
-        if delete:
+        # --- Single-record review & edit ---
+        st.markdown("### ✏️ Review & edit a record")
+        ids = [r["id"] for r in records]
+        sel = st.selectbox("Record id", ids, format_func=lambda i: labels[i])
+        rec = next(r for r in records if r["id"] == sel)
+        conf, src = rec.get("confidence", {}), rec.get("source", {})
+        canonical = get_canonical()
+
+        img_col, edit_col = st.columns([1, 1.4])
+        with img_col:
+            show_record_image(sel)
+            if st.button("🔄 Re-scan image", use_container_width=True,
+                         help="Re-run the pipeline on the stored image. Your manual edits are kept."):
+                try:
+                    client().rescan(sel)
+                    st.success("Re-scanned. Human-edited fields were preserved.")
+                    st.rerun()
+                except APIError as e:
+                    st.error(e.detail)
+            st.markdown("**Field confidence**")
+            for f in IMDB_FIELDS:
+                if rec.get(f) not in (None, ""):
+                    st.markdown(f"{conf_emoji(conf.get(f))} `{f}` — {rec.get(f)}  ·  _{src.get(f, '—')}_")
+
+        with edit_col:
+            edited = {}
+            for f in IMDB_FIELDS:
+                if f == "weight_unit":
+                    opts = canonical.get("weight_unit", WEIGHT_UNITS)
+                    opts = [""] + [o for o in opts if o]
+                    cur = rec.get(f) or ""
+                    edited[f] = st.selectbox(f, opts, index=opts.index(cur) if cur in opts else 0, key=f"e_{sel}_{f}")
+                elif f == "weight_value":
+                    edited[f] = st.number_input(f, value=float(rec.get(f) or 0.0), step=1.0, key=f"e_{sel}_{f}")
+                elif f in CANONICAL_FIELDS:
+                    cur = rec.get(f) or ""
+                    opts = [""] + sorted(set(canonical.get(f, []) + ([cur] if cur else [])))
+                    edited[f] = st.selectbox(f, opts, index=opts.index(cur) if cur in opts else 0, key=f"e_{sel}_{f}")
+                else:
+                    edited[f] = st.text_input(f, rec.get(f) or "", key=f"e_{sel}_{f}")
+
+            colsave, coldel = st.columns(2)
+            if colsave.button("💾 Save edits", type="primary", use_container_width=True, key=f"save_{sel}"):
+                # Send only fields the user actually changed → those become source=human.
+                payload = {}
+                for f, v in edited.items():
+                    new = (v or None) if not isinstance(v, (int, float)) else (v or None)
+                    old = rec.get(f) or None
+                    if f == "weight_value":
+                        old = float(old) if old is not None else None
+                        new = float(v) if v else None
+                    if new != old:
+                        payload[f] = new
+                if not payload:
+                    st.info("No changes to save.")
+                else:
+                    try:
+                        client().update_record(sel, payload)
+                        st.success(f"Saved {len(payload)} change(s) — now source=human.")
+                        st.rerun()
+                    except APIError as e:
+                        st.error(e.detail)
+            if coldel.button("🗑️ Delete record", use_container_width=True, key=f"del_{sel}"):
+                try:
+                    client().delete_record(sel)
+                    st.success(f"Deleted record #{sel}.")
+                    st.rerun()
+                except APIError as e:
+                    st.error(e.detail)
+
+# --- History tab -----------------------------------------------------------
+with tab_history:
+    st.subheader("Scan history")
+    st.caption("Every upload is a batch. Browse past scans and drill into their items.")
+    try:
+        sessions = client().list_sessions()
+    except APIError as e:
+        sessions = []
+        st.error(e.detail)
+
+    if not sessions:
+        st.info("No scans yet. Upload images on the Extract tab.")
+    else:
+        table = [
+            {
+                "session": s["id"],
+                "label": s["label"] or "—",
+                "scanned_at": s["created_at"],
+                "items": s["item_count"],
+                "needs_review": s["needs_review_count"],
+            }
+            for s in sessions
+        ]
+        st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
+
+        ids = [s["id"] for s in sessions]
+        labels = {s["id"]: (s["label"] or f"session #{s['id']}") for s in sessions}
+        chosen = st.selectbox("View items in scan", ids, format_func=lambda i: f"{labels[i]} (#{i})")
+        if chosen:
             try:
-                client().delete_record(sel)
-                st.success(f"Deleted record #{sel}.")
-                st.rerun()
+                items = client().list_records(session_id=chosen, limit=200)
+                if items:
+                    st.dataframe(confidence_badge(items), use_container_width=True, hide_index=True)
+                else:
+                    st.info("This scan has no items (all may have been deleted or merged).")
             except APIError as e:
                 st.error(e.detail)
 

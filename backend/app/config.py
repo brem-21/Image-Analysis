@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
     allowed_image_types: str = "image/jpeg,image/png,image/webp"
 
+    # Where scanned source images are stored (swap for S3/GCS later)
+    upload_dir: str = "./uploads"
+
     # Auth rate limiting (login brute-force guard)
     login_max_attempts: int = 5
     login_window_seconds: int = 60

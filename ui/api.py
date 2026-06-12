@@ -64,6 +64,10 @@ class IMDBClient:
                           files=multipart, data={"label": label}, timeout=self.timeout)
         return self._handle(r)
 
+    def list_sessions(self) -> list[dict]:
+        return self._handle(requests.get(f"{self.base_url}/sessions",
+                                        headers=self._headers(), timeout=self.timeout))
+
     def list_records(self, **filters) -> list[dict]:
         params = {k: v for k, v in filters.items() if v not in (None, "", "All")}
         return self._handle(requests.get(f"{self.base_url}/records",
@@ -76,6 +80,26 @@ class IMDBClient:
     def delete_record(self, record_id: int):
         return self._handle(requests.delete(f"{self.base_url}/records/{record_id}",
                                            headers=self._headers(), timeout=self.timeout))
+
+    def get_record_image(self, record_id: int) -> bytes:
+        return self._handle(requests.get(f"{self.base_url}/records/{record_id}/image",
+                                        headers=self._headers(), timeout=self.timeout))
+
+    def rescan(self, record_id: int) -> dict:
+        return self._handle(requests.post(f"{self.base_url}/records/{record_id}/rescan",
+                                         headers=self._headers(), timeout=self.timeout))
+
+    def bulk_approve(self, ids: list[int]) -> dict:
+        return self._handle(requests.post(f"{self.base_url}/records/bulk-approve",
+                                         headers=self._headers(), json={"ids": ids}, timeout=self.timeout))
+
+    def bulk_delete(self, ids: list[int]) -> dict:
+        return self._handle(requests.post(f"{self.base_url}/records/bulk-delete",
+                                         headers=self._headers(), json={"ids": ids}, timeout=self.timeout))
+
+    def canonical(self) -> dict:
+        return self._handle(requests.get(f"{self.base_url}/meta/canonical",
+                                        headers=self._headers(), timeout=self.timeout))
 
     def dedup(self, session_id: int | None = None) -> dict:
         params = {"session_id": session_id} if session_id else {}

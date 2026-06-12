@@ -6,6 +6,7 @@ from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import ExtractionSession, ItemRecord, User
 from app.schemas.imdb import ExtractResponse, RecordOut
+from app.services import storage
 from app.services.pipeline import run_pipeline
 
 router = APIRouter(prefix="/extract", tags=["extract"])
@@ -89,6 +90,8 @@ async def extract(
         result = run_pipeline(image_bytes)
         rec = _record_from_pipeline(result, current_user.id, batch.id)
         db.add(rec)
+        db.flush()  # assign rec.id so we can name the stored image after it
+        rec.image_filename = storage.save_image(rec.id, image_bytes, f.content_type)
         pairs.append((rec, result.get("vlm_error")))
 
     db.commit()

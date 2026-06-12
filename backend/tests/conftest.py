@@ -7,6 +7,7 @@ Gemini extractor.
 """
 import io
 import os
+import shutil
 
 # --- must run before any `app.*` import ---
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_run.db")
@@ -15,6 +16,7 @@ os.environ.setdefault("GEMINI_API_KEY", "")  # force VLM to be mocked
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("LOGIN_MAX_ATTEMPTS", "100")  # avoid cross-test interference
 os.environ.setdefault("LOGIN_WINDOW_SECONDS", "60")
+os.environ.setdefault("UPLOAD_DIR", "./test_uploads")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,12 +31,14 @@ API = "/api/v1"
 
 @pytest.fixture(autouse=True)
 def _fresh_state():
-    """Each test starts with empty tables and a clean rate limiter."""
+    """Each test starts with empty tables, clean rate limiter, empty uploads."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     ratelimit._limiter._hits.clear()
+    shutil.rmtree("./test_uploads", ignore_errors=True)
     yield
     Base.metadata.drop_all(bind=engine)
+    shutil.rmtree("./test_uploads", ignore_errors=True)
 
 
 @pytest.fixture
