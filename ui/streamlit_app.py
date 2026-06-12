@@ -14,9 +14,9 @@ from api import APIError, IMDBClient
 st.set_page_config(page_title="Image-to-IMDB Tester", page_icon="📦", layout="wide")
 
 IMDB_FIELDS = [
-    "barcode", "category_type", "segment_type", "manufacturer", "brand",
-    "product_name", "weight_value", "weight_unit", "packaging_type",
-    "country_of_origin", "promo_message",
+    "item_name", "barcode", "manufacturer", "brand", "weight_value", "weight_unit",
+    "packaging_type", "country_of_origin", "variant_type", "fragrance_flavor",
+    "promotion", "addons", "tagline", "category_type",
 ]
 WEIGHT_UNITS = ["", "g", "kg", "mg", "ml", "l", "oz", "lb", "unit"]
 
@@ -117,7 +117,7 @@ with tab_extract:
             st.success(f"Extracted {len(resp['records'])} record(s) — session #{resp['session_id']}")
             for rec in resp["records"]:
                 flag = "⚠️ needs review" if rec.get("needs_review") else "✅"
-                with st.expander(f"{flag}  Record #{rec['id']} — {rec.get('product_name') or 'Unnamed'}"):
+                with st.expander(f"{flag}  Record #{rec['id']} — {rec.get('item_name') or 'Unnamed'}"):
                     c1, c2 = st.columns(2)
                     with c1:
                         st.markdown("**Values**")
