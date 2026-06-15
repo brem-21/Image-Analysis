@@ -19,7 +19,7 @@ def export_records(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    stmt = select(ItemRecord).where(ItemRecord.user_id == current_user.id)
+    stmt = select(ItemRecord)
     if session_id is not None:
         stmt = stmt.where(ItemRecord.session_id == session_id)
     records = list(db.scalars(stmt))

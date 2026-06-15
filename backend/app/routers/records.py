@@ -40,7 +40,7 @@ def list_records(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[ItemRecord]:
-    filters = [ItemRecord.user_id == current_user.id]
+    filters = []
     if brand:
         filters.append(ItemRecord.brand == brand)
     if category_type:
@@ -50,15 +50,13 @@ def list_records(
     if session_id is not None:
         filters.append(ItemRecord.session_id == session_id)
 
-    total = db.scalar(select(func.count()).select_from(ItemRecord).where(*filters)) or 0
+    base = select(ItemRecord)
+    if filters:
+        base = base.where(*filters)
+    total = db.scalar(select(func.count()).select_from(ItemRecord).where(*filters) if filters else select(func.count()).select_from(ItemRecord)) or 0
     response.headers["X-Total-Count"] = str(total)
 
-    stmt = (
-        select(ItemRecord).where(*filters)
-        .order_by(ItemRecord.id.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    stmt = base.order_by(ItemRecord.id.desc()).limit(limit).offset(offset)
     return list(db.scalars(stmt))
 
 
