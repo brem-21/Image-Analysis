@@ -33,6 +33,8 @@ def list_records(
     response: Response,
     brand: str | None = Query(None),
     category_type: str | None = Query(None),
+    segment_type: str | None = Query(None),
+    packaging_type: str | None = Query(None),
     needs_review: bool | None = Query(None),
     session_id: int | None = Query(None),
     limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
@@ -45,6 +47,10 @@ def list_records(
         filters.append(ItemRecord.brand == brand)
     if category_type:
         filters.append(ItemRecord.category_type == category_type)
+    if segment_type:
+        filters.append(ItemRecord.segment_type == segment_type)
+    if packaging_type:
+        filters.append(ItemRecord.packaging_type == packaging_type)
     if needs_review is not None:
         filters.append(ItemRecord.needs_review == needs_review)
     if session_id is not None:

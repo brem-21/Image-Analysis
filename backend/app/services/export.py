@@ -2,10 +2,10 @@
 
 Column headers and order match the required product-master format exactly:
     ITEM_NAME, BARCODE, MANUFACTURER, BRAND, WEIGHT, PACKAGING_TYPE, COUNTRY,
-    VARIANT_TYPE, FRAGRANCE_FLAVOR, PROMOTION, ADDONS, TAGLINE
+    CATEGORY_TYPE, SEGMENT_TYPE, VARIANT_TYPE, FRAGRANCE_FLAVOR,
+    PROMOTION, ADDONS, TAGLINE
 
-With include_meta=True we append our internal extras (CATEGORY_TYPE,
-NEEDS_REVIEW) after the official columns for the review workflow.
+With include_meta=True we append NEEDS_REVIEW after the official columns.
 """
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ OFFICIAL_COLUMNS: list[tuple[str, str]] = [
     ("WEIGHT", "_weight"),
     ("PACKAGING_TYPE", "packaging_type"),
     ("COUNTRY", "country_of_origin"),
+    ("CATEGORY_TYPE", "category_type"),
+    ("SEGMENT_TYPE", "segment_type"),
     ("VARIANT_TYPE", "variant_type"),
     ("FRAGRANCE_FLAVOR", "fragrance_flavor"),
     ("PROMOTION", "promotion"),
@@ -33,7 +35,6 @@ OFFICIAL_COLUMNS: list[tuple[str, str]] = [
 ]
 
 META_COLUMNS: list[tuple[str, str]] = [
-    ("CATEGORY_TYPE", "category_type"),
     ("NEEDS_REVIEW", "needs_review"),
 ]
 

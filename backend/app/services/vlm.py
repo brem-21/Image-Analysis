@@ -26,12 +26,13 @@ the following attributes from any visible labels, packaging, and logos:
 - weight_raw: the net weight/volume EXACTLY as printed (e.g. "250 g", "1.5L")
 - packaging_type: container type (Bottle, Can, Sachet, Box, Pouch, Tub, Glass Jar, etc.)
 - country_of_origin: country shown (e.g. "Made in ..."), else null
+- category_type: high-level product category (e.g. Spreads, Condiments, Beverages)
+- segment_type: market segment shown or implied on pack (e.g. Premium, Value, Economy, Mainstream), else null
 - variant_type: the product variant (e.g. ORIGINAL, DIET, SALTED, UNSALTED, ZERO)
 - fragrance_flavor: the flavour or fragrance (e.g. VANILLA, LEMON, SALTED MARGARINE)
 - promotion: any promotional OFFER text (e.g. "20% EXTRA FREE", "BUY 1 GET 1"), else null
 - addons: bundled add-ons or free gifts shown on the pack, else null
 - tagline: marketing slogan / descriptor (e.g. "SPREAD FOR BREAD", "LOW FAT"), else null
-- category_type: high-level product category (e.g. Spreads, Condiments, Beverages)
 
 Rules:
 - If a field is not clearly visible, return null for it. Do NOT guess.

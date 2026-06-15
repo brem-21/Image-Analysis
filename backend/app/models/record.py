@@ -34,12 +34,13 @@ class ItemRecord(Base):
     weight_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
     packaging_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     country_of_origin: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    category_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    segment_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     variant_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fragrance_flavor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     promotion: Mapped[str | None] = mapped_column(String(512), nullable=True)
     addons: Mapped[str | None] = mapped_column(String(512), nullable=True)
     tagline: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    category_type: Mapped[str | None] = mapped_column(String(128), nullable=True)  # internal extra
 
     # S3 key of the original uploaded image (None when S3 is not configured)
     s3_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -65,6 +66,6 @@ class ItemRecord(Base):
 
     IMDB_FIELDS = (
         "item_name", "barcode", "manufacturer", "brand", "weight_value", "weight_unit",
-        "packaging_type", "country_of_origin", "variant_type", "fragrance_flavor",
-        "promotion", "addons", "tagline", "category_type",
+        "packaging_type", "country_of_origin", "category_type", "segment_type",
+        "variant_type", "fragrance_flavor", "promotion", "addons", "tagline",
     )
