@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models import ExtractionSession, ItemRecord, User
 from app.schemas.imdb import ExtractResponse, RecordOut
 from app.services.pipeline import run_pipeline
+from app.services import storage as storage_svc
 
 router = APIRouter(prefix="/extract", tags=["extract"])
 
@@ -37,7 +38,7 @@ def _validate_uploads(files: list[UploadFile]) -> None:
             )
 
 
-def _record_from_pipeline(result: dict, user_id: int, session_id: int) -> ItemRecord:
+def _record_from_pipeline(result: dict, user_id: int, session_id: int, s3_key: str | None = None) -> ItemRecord:
     v = result["values"]
     return ItemRecord(
         user_id=user_id,
@@ -59,6 +60,7 @@ def _record_from_pipeline(result: dict, user_id: int, session_id: int) -> ItemRe
         confidence=result["confidence"],
         source=result["source"],
         needs_review=result["needs_review"],
+        s3_key=s3_key,
     )
 
 
@@ -86,8 +88,13 @@ async def extract(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 f"'{f.filename}' exceeds the {settings.max_upload_mb}MB limit.",
             )
+
+        # Upload original image to S3 (non-blocking; extraction proceeds even on failure)
+        key = storage_svc.s3_key(current_user.id, batch.id, f.filename or "image.jpg")
+        stored_key = await storage_svc.upload_image(key, image_bytes, f.content_type or "image/jpeg")
+
         result = run_pipeline(image_bytes)
-        rec = _record_from_pipeline(result, current_user.id, batch.id)
+        rec = _record_from_pipeline(result, current_user.id, batch.id, s3_key=stored_key)
         db.add(rec)
         pairs.append((rec, result.get("vlm_error")))
 

@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     default_page_size: int = 50
     max_page_size: int = 200
 
+    # AWS S3 image storage
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "us-east-1"
+    s3_bucket: str = "gdssmaverickdata"
+    s3_prefix: str = "uploads"
+
+    @property
+    def s3_enabled(self) -> bool:
+        return bool(self.aws_access_key_id and self.aws_secret_access_key)
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

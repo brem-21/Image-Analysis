@@ -41,6 +41,9 @@ class ItemRecord(Base):
     tagline: Mapped[str | None] = mapped_column(String(512), nullable=True)
     category_type: Mapped[str | None] = mapped_column(String(128), nullable=True)  # internal extra
 
+    # S3 key of the original uploaded image (None when S3 is not configured)
+    s3_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
     # --- Pipeline metadata (per-field) ---
     # MutableDict so in-place edits (e.g. on PATCH/merge) are tracked & persisted.
     confidence: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=dict)  # {field: 0..1}
