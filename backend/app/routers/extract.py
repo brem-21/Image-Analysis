@@ -5,9 +5,11 @@ from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import ExtractionSession, ItemRecord, User
-from app.schemas.imdb import ExtractResponse, RecordOut
+from sqlalchemy import select
+from app.schemas.imdb import ExtractResponse, MergeCandidate, RecordOut
 from app.services.pipeline import run_pipeline
 from app.services import storage as storage_svc
+from app.services import ai_dedup
 
 router = APIRouter(prefix="/extract", tags=["extract"])
 
@@ -75,6 +77,9 @@ async def extract(
     one IMDB record per image (scoped to the current user + this batch)."""
     _validate_uploads(files)
 
+    # Snapshot existing records BEFORE this batch so AI dedup only compares against them.
+    existing_records = list(db.scalars(select(ItemRecord)))
+
     batch = ExtractionSession(user_id=current_user.id, label=label)
     db.add(batch)
     db.flush()  # assign batch.id
@@ -100,6 +105,7 @@ async def extract(
 
     db.commit()
 
+    new_records = [rec for rec, _ in pairs]
     out: list[RecordOut] = []
     for rec, vlm_error in pairs:
         db.refresh(rec)
@@ -107,4 +113,7 @@ async def extract(
         record_out.vlm_error = vlm_error
         out.append(record_out)
 
-    return ExtractResponse(session_id=batch.id, records=out)
+    # Ask Gemini whether any new records match something already in the database.
+    dedup_candidates: list[MergeCandidate] = ai_dedup.check_duplicates(new_records, existing_records)
+
+    return ExtractResponse(session_id=batch.id, records=out, dedup_candidates=dedup_candidates)

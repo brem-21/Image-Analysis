@@ -126,6 +126,7 @@ class RecordUpdate(BaseModel):
 class ExtractResponse(BaseModel):
     session_id: int
     records: list[RecordOut]
+    dedup_candidates: list["MergeCandidate"] = Field(default_factory=list)
 
 
 class MergeCandidate(BaseModel):
