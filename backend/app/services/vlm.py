@@ -46,6 +46,7 @@ Return ONLY structured data matching the provided schema."""
 class GeminiExtractor:
     def __init__(self) -> None:
         self._client = None
+        self.name = "gemini"
 
     def _get_client(self):
         if self._client is None:
@@ -74,7 +75,6 @@ class GeminiExtractor:
         contents = [types.Part.from_bytes(data=image_bytes, mime_type=mime_type), _PROMPT]
 
         # Retry transient overload/rate-limit errors (503/429) with backoff.
-        # gemini-*-preview models commonly return 503 under load.
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
@@ -91,10 +91,9 @@ class GeminiExtractor:
                 logger.warning("Gemini %s on attempt %d/%d; retrying in %.1fs",
                                status, attempt + 1, _MAX_RETRIES, delay)
                 time.sleep(delay)
-        else:  # pragma: no cover - loop always breaks or raises
+        else:  # pragma: no cover
             raise last_exc  # type: ignore[misc]
 
-        # The SDK can return a parsed object; fall back to JSON text otherwise.
         parsed = getattr(response, "parsed", None)
         if isinstance(parsed, VLMExtraction):
             return parsed

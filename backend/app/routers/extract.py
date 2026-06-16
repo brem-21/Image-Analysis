@@ -1,3 +1,6 @@
+import asyncio
+from functools import partial
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -85,6 +88,8 @@ async def extract(
     db.add(batch)
     db.flush()  # assign batch.id
 
+    loop = asyncio.get_event_loop()
+
     # Keep each persisted record paired with its (transient) VLM error.
     pairs: list[tuple[ItemRecord, str | None]] = []
     for f in files:
@@ -99,7 +104,7 @@ async def extract(
         key = storage_svc.s3_key(current_user.id, batch.id, f.filename or "image.jpg")
         stored_key = await storage_svc.upload_image(key, image_bytes, f.content_type or "image/jpeg")
 
-        result = run_pipeline(image_bytes)
+        result = await loop.run_in_executor(None, partial(run_pipeline, image_bytes))
         rec = _record_from_pipeline(result, current_user.id, batch.id, s3_key=stored_key)
         db.add(rec)
         pairs.append((rec, result.get("vlm_error")))
@@ -115,6 +120,8 @@ async def extract(
         out.append(record_out)
 
     # Ask Gemini whether any new records match something already in the database.
-    dedup_candidates: list[MergeCandidate] = ai_dedup.check_duplicates(new_records, existing_records)
+    dedup_candidates: list[MergeCandidate] = await loop.run_in_executor(
+        None, partial(ai_dedup.check_duplicates, new_records, existing_records)
+    )
 
     return ExtractResponse(session_id=batch.id, records=out, dedup_candidates=dedup_candidates)

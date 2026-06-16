@@ -19,32 +19,31 @@ logger = logging.getLogger(__name__)
 
 
 def _vlm_extract(image_bytes: bytes) -> tuple[VLMExtraction, str | None]:
-    """Try VLM providers in order: OpenAI → OpenRouter → Gemini.
+    """Try VLM providers in order: OpenRouter → OpenAI → Gemini.
 
-    Returns the first successful result plus the provider name, or an empty
-    VLMExtraction and the concatenated error string if all providers fail.
+    Returns the first successful result, or an empty VLMExtraction and the
+    concatenated error string if all providers fail.
     """
     from app.services.vlm import extractor as gemini_extractor
     from app.services.vlm_openai import openai_extractor, openrouter_extractor
 
     candidates = []
-    if settings.openai_api_key:
-        candidates.append(openai_extractor)
     if settings.openrouter_api_key:
         candidates.append(openrouter_extractor)
+    if settings.openai_api_key:
+        candidates.append(openai_extractor)
     candidates.append(gemini_extractor)  # always included as final fallback
 
     errors: list[str] = []
     for ext in candidates:
-        name = getattr(ext, "name", "gemini")
         try:
             result = ext.extract(image_bytes, mime_type="image/jpeg")
-            logger.info("VLM extraction succeeded via %s", name)
+            logger.info("VLM extraction succeeded via %s", ext.name)
             return result, None
         except Exception as exc:
-            msg = f"{name}: {type(exc).__name__}: {exc}"
+            msg = f"{ext.name}: {type(exc).__name__}: {exc}"
             errors.append(msg)
-            logger.warning("VLM provider %s failed: %s", name, exc)
+            logger.warning("VLM provider %s failed: %s", ext.name, exc)
 
     return VLMExtraction(), " | ".join(errors)
 

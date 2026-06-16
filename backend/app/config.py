@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Gemini Flash (tertiary VLM fallback)
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
+    gemini_timeout_seconds: float = 60.0
 
     # Auth
     jwt_secret: str = "change-me"
@@ -31,7 +32,6 @@ class Settings(BaseSettings):
     # Pipeline
     confidence_threshold: float = 0.7
     off_api_base: str = "https://world.openfoodfacts.org"
-    gemini_timeout_seconds: float = 60.0
 
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
