@@ -5,8 +5,11 @@ from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import ExtractionSession, ItemRecord, User
-from app.schemas.imdb import ExtractResponse, RecordOut
+from sqlalchemy import select
+from app.schemas.imdb import ExtractResponse, MergeCandidate, RecordOut
 from app.services.pipeline import run_pipeline
+from app.services import storage as storage_svc
+from app.services import ai_dedup
 
 router = APIRouter(prefix="/extract", tags=["extract"])
 
@@ -37,7 +40,7 @@ def _validate_uploads(files: list[UploadFile]) -> None:
             )
 
 
-def _record_from_pipeline(result: dict, user_id: int, session_id: int) -> ItemRecord:
+def _record_from_pipeline(result: dict, user_id: int, session_id: int, s3_key: str | None = None) -> ItemRecord:
     v = result["values"]
     return ItemRecord(
         user_id=user_id,
@@ -50,15 +53,17 @@ def _record_from_pipeline(result: dict, user_id: int, session_id: int) -> ItemRe
         weight_unit=v.get("weight_unit"),
         packaging_type=v.get("packaging_type"),
         country_of_origin=v.get("country_of_origin"),
+        category_type=v.get("category_type"),
+        segment_type=v.get("segment_type"),
         variant_type=v.get("variant_type"),
         fragrance_flavor=v.get("fragrance_flavor"),
         promotion=v.get("promotion"),
         addons=v.get("addons"),
         tagline=v.get("tagline"),
-        category_type=v.get("category_type"),
         confidence=result["confidence"],
         source=result["source"],
         needs_review=result["needs_review"],
+        s3_key=s3_key,
     )
 
 
@@ -73,6 +78,9 @@ async def extract(
     one IMDB record per image (scoped to the current user + this batch)."""
     _validate_uploads(files)
 
+    # Snapshot existing records BEFORE this batch so AI dedup only compares against them.
+    existing_records = list(db.scalars(select(ItemRecord)))
+
     batch = ExtractionSession(user_id=current_user.id, label=label)
     db.add(batch)
     db.flush()  # assign batch.id
@@ -86,13 +94,19 @@ async def extract(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 f"'{f.filename}' exceeds the {settings.max_upload_mb}MB limit.",
             )
+
+        # Upload original image to S3 (non-blocking; extraction proceeds even on failure)
+        key = storage_svc.s3_key(current_user.id, batch.id, f.filename or "image.jpg")
+        stored_key = await storage_svc.upload_image(key, image_bytes, f.content_type or "image/jpeg")
+
         result = run_pipeline(image_bytes)
-        rec = _record_from_pipeline(result, current_user.id, batch.id)
+        rec = _record_from_pipeline(result, current_user.id, batch.id, s3_key=stored_key)
         db.add(rec)
         pairs.append((rec, result.get("vlm_error")))
 
     db.commit()
 
+    new_records = [rec for rec, _ in pairs]
     out: list[RecordOut] = []
     for rec, vlm_error in pairs:
         db.refresh(rec)
@@ -100,4 +114,7 @@ async def extract(
         record_out.vlm_error = vlm_error
         out.append(record_out)
 
-    return ExtractResponse(session_id=batch.id, records=out)
+    # Ask Gemini whether any new records match something already in the database.
+    dedup_candidates: list[MergeCandidate] = ai_dedup.check_duplicates(new_records, existing_records)
+
+    return ExtractResponse(session_id=batch.id, records=out, dedup_candidates=dedup_candidates)

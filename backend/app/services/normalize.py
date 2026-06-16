@@ -73,6 +73,7 @@ def normalize_country(raw: str | None) -> str | None:
 CANONICAL = {
     "brand": ["Coca-Cola", "Pepsi", "Nestle", "Unilever", "Blue Band", "Lele", "Indomie"],
     "category_type": ["Beverages", "Snacks", "Dairy", "Spreads", "Condiments", "Household", "Personal Care"],
+    "segment_type": ["Premium", "Value", "Economy", "Mainstream", "Standard"],
     "variant_type": ["Original", "Diet", "Salted", "Unsalted", "Zero", "Light"],
     "packaging_type": ["Bottle", "Can", "Sachet", "Box", "Pouch", "Carton", "Jar", "Tub", "Glass Jar", "Tube"],
 }

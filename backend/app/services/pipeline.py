@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Soft fields the VLM returns directly (excludes barcode, weight, item_name).
 _VLM_FIELDS = (
     "manufacturer", "brand", "packaging_type", "country_of_origin",
-    "variant_type", "fragrance_flavor", "promotion", "addons", "tagline",
-    "category_type",
+    "category_type", "segment_type", "variant_type", "fragrance_flavor",
+    "promotion", "addons", "tagline",
 )
 
 
@@ -81,7 +81,7 @@ def run_pipeline(image_bytes: bytes, use_vlm: bool = True, use_enrichment: bool 
                     source[f] = "external_lookup"
 
     # 4) Normalization / canonicalization (centralized naming).
-    for f in ("brand", "category_type", "variant_type", "packaging_type"):
+    for f in ("brand", "category_type", "segment_type", "variant_type", "packaging_type"):
         if values.get(f):
             values[f] = normalize.canonicalize(f, values[f])
     if values.get("country_of_origin"):
