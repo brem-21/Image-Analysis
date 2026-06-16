@@ -16,23 +16,29 @@ from app.schemas.imdb import VLMExtraction
 
 logger = logging.getLogger(__name__)
 
-_PROMPT = """You are a product-catalog data extractor. Look at the product image(s) — including any text tag/label visible at the bottom of the image — and extract the following attributes from labels, packaging, and logos.
+_PROMPT = """You are a product-catalog data extractor. Examine every part of the product image(s) carefully — front panel, back panel, side panels, bottom, any shelf/price tag at the bottom of the image, and all small print — then extract the fields below.
 
-Return ONLY a valid JSON object with exactly these keys. Use null for any field not clearly visible — do NOT guess.
+RULES:
+1. Read what is actually printed on the packaging. Do NOT guess or infer from general product knowledge.
+2. For each field, scan the entire image before giving up — the value may appear in small text, on a side panel, or on a tag.
+3. Only return null when the information is genuinely absent from the image after a thorough look.
+4. Set confidence 0.85–1.0 when the text is clearly legible; 0.5–0.84 when partially visible or small but readable; null when not found.
+
+Return ONLY a valid JSON object with exactly these keys:
 
 {
-  "manufacturer": "full legal company name that makes the product, e.g. UPFIELD, NESTLE, GB FOODS",
-  "brand": "brand name shown on the packaging, e.g. BLUE BAND, MAGGI, POMO",
+  "manufacturer": "full legal company name printed on pack, e.g. UPFIELD, NESTLE, GB FOODS",
+  "brand": "brand name on the packaging, e.g. BLUE BAND, MAGGI, POMO",
   "weight_raw": "net weight/volume EXACTLY as printed including unit, e.g. '250G', '500ML', '1.5 KG'",
-  "packaging_type": "physical container — uppercase short form, e.g. TUB, GLASS JAR, SACHET, BOTTLE, CAN, BOX, POUCH, TIN, WRAPPED",
-  "country_of_origin": "country from 'Made in ...' or 'Product of ...' — strip the prefix; null if not shown",
-  "category_type": "short product type as on a shelf tag — uppercase, e.g. MARGARINE, MAYONNAISE, BUTTER, POWDER, BEVERAGE, DETERGENT, TEABAG, TOMATO MIX, TOMATO PASTE, CHOCOLATE, SOAP, NOODLES",
-  "segment_type": "market segment if clearly shown, e.g. PREMIUM, VALUE, ECONOMY, MAINSTREAM; null if absent",
-  "variant_type": "product variant if shown, e.g. ORIGINAL, LOW FAT, SALTED, DIET, ZERO, 3 IN 1; null if absent",
-  "fragrance_flavor": "flavor or fragrance if shown, e.g. STRAWBERRY, LEMON, ORANGE, GINGER & GARLIC; null if absent",
-  "promotion": "on-pack promotional offer verbatim, e.g. '50% OFF', 'BUY 1 GET 1', '20% EXTRA FREE'; null if absent",
-  "addons": "bundled add-ons or free gifts on pack, e.g. 'SPOON INCLUDED', '5 FREE ENVELOPE'; null if absent",
-  "tagline": "marketing slogan or descriptor, e.g. 'SPREAD FOR BREAD', 'LOW FAT', 'CHOLESTEROL FREE'; null if absent",
+  "packaging_type": "physical container — uppercase, e.g. TUB, GLASS JAR, SACHET, BOTTLE, CAN, BOX, POUCH, TIN, WRAPPED",
+  "country_of_origin": "country printed after 'Made in' or 'Product of' — strip the prefix; null if not on pack",
+  "category_type": "shelf-tag product type — uppercase, e.g. MARGARINE, MAYONNAISE, BUTTER, POWDER, BEVERAGE, DETERGENT, TEABAG, TOMATO MIX, TOMATO PASTE, CHOCOLATE, SOAP, NOODLES",
+  "segment_type": "market segment printed on pack, e.g. PREMIUM, VALUE, ECONOMY, MAINSTREAM; null if not stated",
+  "variant_type": "product variant printed on pack, e.g. ORIGINAL, LOW FAT, SALTED, DIET, ZERO, 3 IN 1; null if not stated",
+  "fragrance_flavor": "flavor or fragrance printed on pack, e.g. STRAWBERRY, LEMON, GINGER & GARLIC; null if not stated",
+  "promotion": "on-pack promotional offer verbatim, e.g. '50% OFF', 'BUY 1 GET 1'; null if none",
+  "addons": "bundled add-ons or free gifts printed on pack, e.g. 'SPOON INCLUDED'; null if none",
+  "tagline": "marketing slogan or descriptor on pack, e.g. 'SPREAD FOR BREAD', 'CHOLESTEROL FREE'; null if none",
   "confidence": {
     "manufacturer": 0.0,
     "brand": 0.0,
@@ -49,7 +55,6 @@ Return ONLY a valid JSON object with exactly these keys. Use null for any field 
   }
 }
 
-Set each confidence value to 0.0–1.0 based on how clearly visible that field is.
 Do NOT read or transcribe the barcode number. Do NOT compose a full product name."""
 
 
