@@ -16,25 +16,23 @@ from app.schemas.imdb import VLMExtraction
 
 logger = logging.getLogger(__name__)
 
-_PROMPT = """You are a product-catalog data extractor. Look at the product image and extract
-the following attributes from any visible labels, packaging, and logos.
+_PROMPT = """You are a product-catalog data extractor. Look at the product image(s) — including any text tag/label visible at the bottom of the image — and extract the following attributes from labels, packaging, and logos.
 
-Return ONLY a valid JSON object with exactly these keys. Use null for any field
-that is not clearly visible on the packaging — do NOT guess.
+Return ONLY a valid JSON object with exactly these keys. Use null for any field not clearly visible — do NOT guess.
 
 {
-  "manufacturer": "company that makes the product (full legal name if shown)",
-  "brand": "brand name shown on the packaging",
-  "weight_raw": "net weight/volume EXACTLY as printed, e.g. '250 g' or '1.5L'",
-  "packaging_type": "container type, e.g. Bottle, Can, Sachet, Box, Pouch, Tub, Jar",
-  "country_of_origin": "country shown as 'Made in ...' — strip the 'Made in' prefix",
-  "category_type": "high-level product category, e.g. Spreads, Condiments, Beverages",
-  "segment_type": "market segment shown or implied on pack, e.g. Premium, Value, Economy",
-  "variant_type": "product variant, e.g. ORIGINAL, DIET, SALTED, ZERO",
-  "fragrance_flavor": "flavour or fragrance, e.g. VANILLA, LEMON, SALTED MARGARINE",
-  "promotion": "promotional offer text, e.g. '20% EXTRA FREE', 'BUY 1 GET 1'",
-  "addons": "bundled add-ons or free gifts shown on pack",
-  "tagline": "marketing slogan or descriptor, e.g. 'SPREAD FOR BREAD', 'LOW FAT'",
+  "manufacturer": "full legal company name that makes the product, e.g. UPFIELD, NESTLE, GB FOODS",
+  "brand": "brand name shown on the packaging, e.g. BLUE BAND, MAGGI, POMO",
+  "weight_raw": "net weight/volume EXACTLY as printed including unit, e.g. '250G', '500ML', '1.5 KG'",
+  "packaging_type": "physical container — uppercase short form, e.g. TUB, GLASS JAR, SACHET, BOTTLE, CAN, BOX, POUCH, TIN, WRAPPED",
+  "country_of_origin": "country from 'Made in ...' or 'Product of ...' — strip the prefix; null if not shown",
+  "category_type": "short product type as on a shelf tag — uppercase, e.g. MARGARINE, MAYONNAISE, BUTTER, POWDER, BEVERAGE, DETERGENT, TEABAG, TOMATO MIX, TOMATO PASTE, CHOCOLATE, SOAP, NOODLES",
+  "segment_type": "market segment if clearly shown, e.g. PREMIUM, VALUE, ECONOMY, MAINSTREAM; null if absent",
+  "variant_type": "product variant if shown, e.g. ORIGINAL, LOW FAT, SALTED, DIET, ZERO, 3 IN 1; null if absent",
+  "fragrance_flavor": "flavor or fragrance if shown, e.g. STRAWBERRY, LEMON, ORANGE, GINGER & GARLIC; null if absent",
+  "promotion": "on-pack promotional offer verbatim, e.g. '50% OFF', 'BUY 1 GET 1', '20% EXTRA FREE'; null if absent",
+  "addons": "bundled add-ons or free gifts on pack, e.g. 'SPOON INCLUDED', '5 FREE ENVELOPE'; null if absent",
+  "tagline": "marketing slogan or descriptor, e.g. 'SPREAD FOR BREAD', 'LOW FAT', 'CHOLESTEROL FREE'; null if absent",
   "confidence": {
     "manufacturer": 0.0,
     "brand": 0.0,
@@ -52,7 +50,7 @@ that is not clearly visible on the packaging — do NOT guess.
 }
 
 Set each confidence value to 0.0–1.0 based on how clearly visible that field is.
-Do NOT read or transcribe the barcode number. Do NOT compose a product name."""
+Do NOT read or transcribe the barcode number. Do NOT compose a full product name."""
 
 
 class OpenAICompatibleExtractor:
