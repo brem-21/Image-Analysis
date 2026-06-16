@@ -1,15 +1,15 @@
-"""AI-powered duplicate detection using OpenAI.
+"""AI-powered duplicate detection using OpenRouter.
 
 Strategy
 --------
 1. Fast pre-filter (no API cost) — exact barcode match or brand similarity ≥ 0.5
    narrows the full record set to a shortlist of plausible candidates.
    Exact barcode hits are returned immediately (certainty = 1.0).
-2. OpenAI call — given the new record's extracted fields and the shortlist, the
+2. OpenRouter call — given the new record's extracted fields and the shortlist, the
    model decides which (if any) are the same physical product.
    This catches brand name variants, weight unit differences, OCR errors, and
    product line nuances that heuristics miss.
-3. Falls back gracefully to an empty list if OpenAI is unavailable.
+3. Falls back gracefully to an empty list if OpenRouter is unavailable.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from rapidfuzz import fuzz
 
 from app.config import settings
@@ -40,6 +40,15 @@ class _DuplicateMatch(BaseModel):
     is_duplicate: bool
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_id_alias(cls, data: object) -> object:
+        # The model often echoes back "id" (the key from the candidate JSON).
+        # Accept it as an alias for existing_record_id.
+        if isinstance(data, dict) and "id" in data and "existing_record_id" not in data:
+            return {**data, "existing_record_id": data["id"]}
+        return data
 
 
 class _AIDedupResponse(BaseModel):
@@ -79,8 +88,13 @@ Newly extracted product:
 Existing database candidates:
 {candidates}
 
-For every candidate, set is_duplicate=true only when you are confident it is the same product.
-Provide a confidence score (0.0–1.0) and a brief reason."""
+For EVERY candidate return one object with:
+  "existing_record_id": <the candidate's "id" value>,
+  "is_duplicate": true/false,
+  "confidence": 0.0–1.0,
+  "reason": "<brief explanation>"
+
+Set is_duplicate=true only when you are confident it is the same physical SKU."""
 
 
 # ── Pre-filter (fast, no API cost) ───────────────────────────────────────────
@@ -116,26 +130,20 @@ def _pre_filter(
 
 # ── AI call ───────────────────────────────────────────────────────────────────
 
-def _call_openai(new_rec: "ItemRecord", candidates: list["ItemRecord"]) -> list[MergeCandidate]:
-    if not settings.openai_api_key and not settings.openrouter_api_key:
-        logger.debug("No OpenAI/OpenRouter key set — skipping AI dedup")
+def _call_openrouter(new_rec: "ItemRecord", candidates: list["ItemRecord"]) -> list[MergeCandidate]:
+    if not settings.openrouter_api_key:
+        logger.debug("OPENROUTER_API_KEY not set — skipping AI dedup")
         return []
 
     try:
         from openai import OpenAI
-        if settings.openrouter_api_key:
-            client = OpenAI(api_key=settings.openrouter_api_key, base_url="https://openrouter.ai/api/v1")
-            model = settings.openrouter_model
-        else:
-            client = OpenAI(api_key=settings.openai_api_key)
-            model = settings.openai_model
-
+        client = OpenAI(api_key=settings.openrouter_api_key, base_url="https://openrouter.ai/api/v1", timeout=15.0)
         user_msg = _USER_TEMPLATE.format(
             new_product=json.dumps(_record_summary(new_rec), indent=2),
             candidates=json.dumps([_record_summary(r) for r in candidates], indent=2),
         )
         response = client.chat.completions.create(
-            model=model,
+            model=settings.openrouter_model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_msg},
@@ -146,59 +154,7 @@ def _call_openai(new_rec: "ItemRecord", candidates: list["ItemRecord"]) -> list[
         raw = response.choices[0].message.content or "{}"
         ai_result = _AIDedupResponse.model_validate(json.loads(raw))
     except Exception as exc:
-        logger.error("AI dedup OpenAI/OpenRouter call failed: %s", exc)
-        return _call_gemini(new_rec, candidates)
-
-    results: list[MergeCandidate] = []
-    for match in ai_result.matches:
-        if not match.is_duplicate or match.confidence < _AI_CONFIDENCE_THRESHOLD:
-            continue
-        keep_id = min(match.existing_record_id, new_rec.id)
-        dup_id  = max(match.existing_record_id, new_rec.id)
-        results.append(MergeCandidate(
-            record_id=dup_id,
-            duplicate_of=keep_id,
-            score=round(match.confidence, 3),
-            reason=match.reason,
-            matched_fields=["ai_analysis"],
-        ))
-
-    return results
-
-
-def _call_gemini(new_rec: "ItemRecord", candidates: list["ItemRecord"]) -> list[MergeCandidate]:
-    if not settings.gemini_api_key:
-        logger.debug("GEMINI_API_KEY not set — skipping Gemini dedup fallback")
-        return []
-
-    try:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=settings.gemini_api_key)
-        prompt = _SYSTEM_PROMPT + "\n\n" + _USER_TEMPLATE.format(
-            new_product=json.dumps(_record_summary(new_rec), indent=2),
-            candidates=json.dumps([_record_summary(r) for r in candidates], indent=2),
-        )
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=_AIDedupResponse,
-            temperature=0.0,
-        )
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=[prompt],
-            config=config,
-        )
-        parsed = getattr(response, "parsed", None)
-        if isinstance(parsed, _AIDedupResponse):
-            ai_result = parsed
-        elif parsed is not None:
-            ai_result = _AIDedupResponse.model_validate(parsed)
-        else:
-            ai_result = _AIDedupResponse.model_validate(json.loads(response.text))
-    except Exception as exc:
-        logger.error("AI dedup Gemini call failed: %s", exc)
+        logger.error("AI dedup OpenRouter call failed: %s", exc)
         return []
 
     results: list[MergeCandidate] = []
@@ -242,7 +198,7 @@ def check_duplicates(
                 all_candidates.append(c)
 
         if ai_candidates:
-            for c in _call_openai(new_rec, ai_candidates):
+            for c in _call_openrouter(new_rec, ai_candidates):
                 key = (c.duplicate_of, c.record_id)
                 if key not in seen:
                     seen.add(key)

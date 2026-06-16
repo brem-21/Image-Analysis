@@ -76,7 +76,7 @@ class OpenAICompatibleExtractor:
             api_key = getattr(settings, self._api_key_setting)
             if not api_key:
                 raise RuntimeError(f"{self._api_key_setting.upper()} is not configured")
-            kwargs: dict = {"api_key": api_key}
+            kwargs: dict = {"api_key": api_key, "timeout": 60.0}
             if self._base_url:
                 kwargs["base_url"] = self._base_url
             self._client = OpenAI(**kwargs)

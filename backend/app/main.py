@@ -26,8 +26,8 @@ async def lifespan(app: FastAPI):
         if settings.is_production:
             raise RuntimeError(msg + " Refusing to start in production.")
         logger.warning("%s Set JWT_SECRET in .env before deploying.", msg)
-    if not settings.openrouter_api_key and not settings.openai_api_key and not settings.gemini_api_key:
-        logger.warning("No VLM provider keys set (OPENROUTER_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) — image extraction will fail.")
+    if not settings.openrouter_api_key and not settings.openai_api_key:
+        logger.warning("No VLM provider keys set (OPENROUTER_API_KEY, OPENAI_API_KEY) — image extraction will fail.")
 
     if settings.auto_create_tables:
         init_db()

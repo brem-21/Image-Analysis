@@ -19,12 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 def _vlm_extract(image_bytes: bytes) -> tuple[VLMExtraction, str | None]:
-    """Try VLM providers in order: OpenRouter → OpenAI → Gemini.
+    """Try VLM providers in order: OpenRouter → OpenAI.
 
     Returns the first successful result, or an empty VLMExtraction and the
     concatenated error string if all providers fail.
     """
-    from app.services.vlm import extractor as gemini_extractor
     from app.services.vlm_openai import openai_extractor, openrouter_extractor
 
     candidates = []
@@ -32,7 +31,9 @@ def _vlm_extract(image_bytes: bytes) -> tuple[VLMExtraction, str | None]:
         candidates.append(openrouter_extractor)
     if settings.openai_api_key:
         candidates.append(openai_extractor)
-    candidates.append(gemini_extractor)  # always included as final fallback
+
+    if not candidates:
+        return VLMExtraction(), "No VLM provider configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)"
 
     errors: list[str] = []
     for ext in candidates:
