@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "IMDB Postgres",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "imdb",
+      "Username": "imdb",
+      "SSLMode": "prefer",
+      "Comment": "Password: imdb_pass"
+    }
+  }
+}

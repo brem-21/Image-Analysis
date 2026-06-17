@@ -15,21 +15,24 @@ router = APIRouter(prefix="/export", tags=["export"])
 def export_records(
     format: str = Query("csv", pattern="^(csv|xlsx)$"),
     session_id: int | None = Query(None),
-    include_meta: bool = Query(False, description="Append CATEGORY_TYPE + NEEDS_REVIEW columns"),
+    columns: list[str] = Query(default=[], description="Columns to include; omit for all"),
+    include_meta: bool = Query(False, description="Ignored — all columns are always available"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    stmt = select(ItemRecord).where(ItemRecord.user_id == current_user.id)
+    stmt = select(ItemRecord)
     if session_id is not None:
         stmt = stmt.where(ItemRecord.session_id == session_id)
     records = list(db.scalars(stmt))
 
+    selected = columns or None  # None → all columns
+
     if format == "xlsx":
-        content = export_svc.to_xlsx(records, include_meta=include_meta)
+        content = export_svc.to_xlsx(records, columns=selected)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         filename = "imdb_export.xlsx"
     else:
-        content = export_svc.to_csv(records, include_meta=include_meta)
+        content = export_svc.to_csv(records, columns=selected)
         media = "text/csv"
         filename = "imdb_export.csv"
 
