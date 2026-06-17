@@ -18,34 +18,34 @@ logger = logging.getLogger(__name__)
 _MAX_RETRIES = 4
 _BASE_DELAY = 1.5  # seconds; exponential backoff: 1.5, 3, 6, ...
 
-_PROMPT = """You are a product-catalog data extractor. Look at the product image and extract
-the following attributes from any visible labels, packaging, and logos:
+_PROMPT = """You are a product-catalog data extractor. Look at the product image(s) — including any text tag/label at the bottom of the image — and extract the following attributes from visible labels, packaging, and logos.
 
-- manufacturer: the company that makes the product (full legal name if shown)
-- brand: the brand name shown on the packaging
-- weight_raw: the net weight/volume EXACTLY as printed (e.g. "250 g", "1.5L")
-- packaging_type: container type (Bottle, Can, Sachet, Box, Pouch, Tub, Glass Jar, etc.)
-- country_of_origin: country shown (e.g. "Made in ..."), else null
-- category_type: high-level product category (e.g. Spreads, Condiments, Beverages)
-- segment_type: market segment shown or implied on pack (e.g. Premium, Value, Economy, Mainstream), else null
-- variant_type: the product variant (e.g. ORIGINAL, DIET, SALTED, UNSALTED, ZERO)
-- fragrance_flavor: the flavour or fragrance (e.g. VANILLA, LEMON, SALTED MARGARINE)
-- promotion: any promotional OFFER text (e.g. "20% EXTRA FREE", "BUY 1 GET 1"), else null
-- addons: bundled add-ons or free gifts shown on the pack, else null
-- tagline: marketing slogan / descriptor (e.g. "SPREAD FOR BREAD", "LOW FAT"), else null
+Fields to extract:
+- manufacturer: full legal company name that manufactures the product (e.g. UPFIELD, NESTLE, GB FOODS)
+- brand: brand name shown on the packaging (e.g. BLUE BAND, MAGGI, POMO)
+- weight_raw: net weight or net volume EXACTLY as printed, including unit (e.g. "250G", "500ML", "1.5 KG")
+- packaging_type: physical container form — use uppercase short form (e.g. TUB, GLASS JAR, SACHET, BOTTLE, CAN, BOX, POUCH, TIN, WRAPPED)
+- country_of_origin: country shown as "Made in …" or "Product of …" — strip the prefix; else null
+- category_type: short product type descriptor as would appear on a shelf tag — use uppercase (e.g. MARGARINE, MAYONNAISE, BUTTER, POWDER, NOODLES, BEVERAGE, DETERGENT, TEABAG, TOMATO MIX, TOMATO PASTE, CHOCOLATE, SOAP)
+- segment_type: market segment if clearly indicated on pack (e.g. PREMIUM, VALUE, ECONOMY, MAINSTREAM); else null
+- variant_type: product variant if shown (e.g. ORIGINAL, LOW FAT, SALTED, DIET, ZERO, 3 IN 1); else null
+- fragrance_flavor: flavor or fragrance if shown (e.g. STRAWBERRY, LEMON, ORANGE, VANILLA, RICH, GINGER & GARLIC); else null
+- promotion: on-pack promotional offer text verbatim (e.g. "50% OFF", "BUY 1 GET 1", "20% EXTRA FREE"); else null
+- addons: bundled add-ons or free gifts shown on pack (e.g. "SPOON INCLUDED", "5 FREE ENVELOPE"); else null
+- tagline: marketing slogan or descriptor (e.g. "SPREAD FOR BREAD", "LOW FAT", "CHOLESTEROL FREE"); else null
 
 Rules:
-- If a field is not clearly visible, return null for it. Do NOT guess.
-- Do NOT attempt to read the barcode number.
-- Do NOT compose a full product/item name — only return the individual fields.
-- For every field, include a confidence score from 0.0 to 1.0 in the
-  "confidence" object keyed by the field name.
+- If a field is not clearly visible, return null. Do NOT guess.
+- Do NOT read or transcribe the barcode number.
+- Do NOT compose a full product/item name — return only the individual fields above.
+- For every field include a confidence score 0.0–1.0 in the "confidence" object keyed by the field name.
 Return ONLY structured data matching the provided schema."""
 
 
 class GeminiExtractor:
     def __init__(self) -> None:
         self._client = None
+        self.name = "gemini"
 
     def _get_client(self):
         if self._client is None:
@@ -74,7 +74,6 @@ class GeminiExtractor:
         contents = [types.Part.from_bytes(data=image_bytes, mime_type=mime_type), _PROMPT]
 
         # Retry transient overload/rate-limit errors (503/429) with backoff.
-        # gemini-*-preview models commonly return 503 under load.
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
@@ -91,10 +90,9 @@ class GeminiExtractor:
                 logger.warning("Gemini %s on attempt %d/%d; retrying in %.1fs",
                                status, attempt + 1, _MAX_RETRIES, delay)
                 time.sleep(delay)
-        else:  # pragma: no cover - loop always breaks or raises
+        else:  # pragma: no cover
             raise last_exc  # type: ignore[misc]
 
-        # The SDK can return a parsed object; fall back to JSON text otherwise.
         parsed = getattr(response, "parsed", None)
         if isinstance(parsed, VLMExtraction):
             return parsed

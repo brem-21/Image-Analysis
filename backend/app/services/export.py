@@ -1,10 +1,10 @@
 """Export records to CSV / Excel.
 
-Every non-internal DB column is included in the standard export:
+Column names and order match the ground-truth submission format:
     RECORD_ID, SESSION_ID,
-    ITEM_NAME, BARCODE, MANUFACTURER, BRAND, WEIGHT, PACKAGING_TYPE, COUNTRY,
-    CATEGORY_TYPE, SEGMENT_TYPE, VARIANT_TYPE, FRAGRANCE_FLAVOR,
-    PROMOTION, ADDONS, TAGLINE,
+    ITEM_NAME, BARCODE, MANUFACTURER, BRAND, WEIGHT, PACKAGING TYPE, COUNTRY,
+    VARIANT, TYPE, FRAGRANCE_FLAVOR, PROMOTION, ADDONS, TAGLINE,
+    SEGMENT_TYPE (extra, not in the 13 required ground-truth columns),
     NEEDS_REVIEW, UPLOADED_AT
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ from app.models import ItemRecord
 from app.services.normalize import format_weight
 
 # (export header, record attribute). WEIGHT is computed via "_weight" sentinel.
+# Headers must match the ground-truth column names exactly.
 ALL_COLUMNS: list[tuple[str, str]] = [
     ("RECORD_ID",        "id"),
     ("SESSION_ID",       "session_id"),
@@ -25,15 +26,15 @@ ALL_COLUMNS: list[tuple[str, str]] = [
     ("MANUFACTURER",     "manufacturer"),
     ("BRAND",            "brand"),
     ("WEIGHT",           "_weight"),
-    ("PACKAGING_TYPE",   "packaging_type"),
+    ("PACKAGING TYPE",   "packaging_type"),   # space, not underscore (ground truth)
     ("COUNTRY",          "country_of_origin"),
-    ("CATEGORY_TYPE",    "category_type"),
-    ("SEGMENT_TYPE",     "segment_type"),
-    ("VARIANT_TYPE",     "variant_type"),
+    ("VARIANT",          "variant_type"),     # ground-truth column name
+    ("TYPE",             "category_type"),    # ground-truth column name
     ("FRAGRANCE_FLAVOR", "fragrance_flavor"),
     ("PROMOTION",        "promotion"),
     ("ADDONS",           "addons"),
     ("TAGLINE",          "tagline"),
+    ("SEGMENT_TYPE",     "segment_type"),     # extra — not in the 13 required columns
     ("NEEDS_REVIEW",     "needs_review"),
     ("UPLOADED_AT",      "created_at"),
 ]

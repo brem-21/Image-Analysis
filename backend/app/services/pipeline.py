@@ -11,11 +11,42 @@ from __future__ import annotations
 import logging
 
 from app.config import settings
+from app.schemas.imdb import VLMExtraction
 from app.services import barcode as barcode_svc
 from app.services import enrichment, normalize, preprocess
-from app.services.vlm import extractor
 
 logger = logging.getLogger(__name__)
+
+
+def _vlm_extract(image_bytes: bytes) -> tuple[VLMExtraction, str | None]:
+    """Try VLM providers in order: OpenRouter → OpenAI.
+
+    Returns the first successful result, or an empty VLMExtraction and the
+    concatenated error string if all providers fail.
+    """
+    from app.services.vlm_openai import openai_extractor, openrouter_extractor
+
+    candidates = []
+    if settings.openrouter_api_key:
+        candidates.append(openrouter_extractor)
+    if settings.openai_api_key:
+        candidates.append(openai_extractor)
+
+    if not candidates:
+        return VLMExtraction(), "No VLM provider configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)"
+
+    errors: list[str] = []
+    for ext in candidates:
+        try:
+            result = ext.extract(image_bytes, mime_type="image/jpeg")
+            logger.info("VLM extraction succeeded via %s", ext.name)
+            return result, None
+        except Exception as exc:
+            msg = f"{ext.name}: {type(exc).__name__}: {exc}"
+            errors.append(msg)
+            logger.warning("VLM provider %s failed: %s", ext.name, exc)
+
+    return VLMExtraction(), " | ".join(errors)
 
 # Soft fields the VLM returns directly (excludes barcode, weight, item_name).
 _VLM_FIELDS = (
@@ -42,23 +73,19 @@ def run_pipeline(image_bytes: bytes, use_vlm: bool = True, use_enrichment: bool 
     # 2) VLM — soft fields with structured output + per-field confidence.
     vlm_error: str | None = None
     if use_vlm:
-        try:
-            vlm = extractor.extract(clean, mime_type="image/jpeg")
-            for f in _VLM_FIELDS:
-                val = getattr(vlm, f, None)
-                if val:
-                    values[f] = val
-                    confidence[f] = float(getattr(vlm.confidence, f, None) or 0.5)
-                    source[f] = "vlm"
-            if vlm.weight_raw:
-                wv, wu = normalize.parse_weight(vlm.weight_raw)
-                if wv is not None:
-                    values["weight_value"], values["weight_unit"] = wv, wu
-                    confidence["weight_value"] = float(vlm.confidence.weight_raw or 0.5)
-                    source["weight_value"] = "vlm"
-        except Exception as exc:  # keep barcode result even if VLM fails
-            vlm_error = f"{type(exc).__name__}: {exc}"
-            logger.error("VLM extraction failed: %s", vlm_error, exc_info=True)
+        vlm, vlm_error = _vlm_extract(clean)
+        for f in _VLM_FIELDS:
+            val = getattr(vlm, f, None)
+            if val:
+                values[f] = val
+                confidence[f] = float(getattr(vlm.confidence, f, None) or 0.5)
+                source[f] = "vlm"
+        if vlm.weight_raw:
+            wv, wu = normalize.parse_weight(vlm.weight_raw)
+            if wv is not None:
+                values["weight_value"], values["weight_unit"] = wv, wu
+                confidence["weight_value"] = float(vlm.confidence.weight_raw or 0.5)
+                source["weight_value"] = "vlm"
 
     # 3) Enrichment — authoritative cross-check by validated barcode.
     if use_enrichment and barcode_svc.is_valid_barcode(values.get("barcode")):
