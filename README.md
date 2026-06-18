@@ -3,6 +3,9 @@
 Automates retail product data entry. Upload product images (front, back, side angles) — the AI extracts all 13 Item Master Database (IMDB) attributes, saves them to PostgreSQL, and lets you review, edit, and export a submission-ready CSV/XLSX.
 
 ---
+Access: http://34.246.222.168:5173/
+        http://34.246.222.168:5174/
+        http://34.246.222.168:5175/
 
 ## Architecture
 
