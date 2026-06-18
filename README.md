@@ -6,6 +6,7 @@ Automates retail product data entry. Upload product images (front, back, side an
 Access: http://34.246.222.168:5173/
         http://34.246.222.168:5174/
         http://34.246.222.168:5175/
+        http://34.246.222.168:5176/
 
 ## Architecture
 
